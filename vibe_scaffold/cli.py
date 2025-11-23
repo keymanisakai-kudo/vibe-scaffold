@@ -2,11 +2,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-单兵项目脚手架工具 v2 - pipx 版本
+单兵项目脚手架工具 v3 - pipx 版本
 
 特点：
-- 支持项目类型: web-app / service-api / tool-script
-- 支持模板: default / fintech-dapp
+- 支持项目类型: web-app / service-api / tool-script / desktop-app
+- 支持模板: default / fintech-dapp / electron-app
 - 自动创建目录结构 + docs 模板 + 简单 git 初始化
 - 写入 project_meta.json 方便后续自动化使用
 """
@@ -19,8 +19,8 @@ from pathlib import Path
 from datetime import datetime
 from textwrap import dedent
 
-PROJECT_TYPES = ["web-app", "service-api", "tool-script"]
-TEMPLATES = ["default", "fintech-dapp"]
+PROJECT_TYPES = ["web-app", "service-api", "tool-script", "desktop-app"]
+TEMPLATES = ["default", "fintech-dapp", "electron-app"]
 
 
 # -------- 通用小工具 --------
@@ -74,6 +74,13 @@ def create_type_dirs(project_root: Path, project_type: str):
     elif project_type == "tool-script":
         for d in ["cli", "core"]:
             (src_root / d).mkdir(parents=True, exist_ok=True)
+
+    elif project_type == "desktop-app":
+        # Electron 桌面应用目录
+        for d in ["main", "renderer", "preload", "shared"]:
+            (src_root / d).mkdir(parents=True, exist_ok=True)
+        # 可以为 E2E/集成测试预留一个目录
+        (project_root / "tests" / "e2e").mkdir(parents=True, exist_ok=True)
 
 
 # -------- 根部文件 --------
@@ -365,9 +372,129 @@ def apply_fintech_dapp_template(project_root: Path, project_type: str, meta: dic
     write_file(project_root / "docs" / "fintech-notes.md", fintech_doc)
 
 
+# -------- 模板: electron-app --------
+
+def apply_electron_app_template(project_root: Path, project_type: str, meta: dict):
+    """
+    Electron 桌面应用模板：
+    - src/main     主进程
+    - src/renderer 渲染进程（建议用 React/Tailwind）
+    - src/preload  预加载脚本（桥接 main 和 renderer）
+    - src/shared   公共协议、类型、常量
+    - docs/electron-notes.md 记录窗口、IPC、安全规划
+    """
+    src_root = project_root / "src"
+    main_root = src_root / "main"
+    renderer_root = src_root / "renderer"
+    preload_root = src_root / "preload"
+    shared_root = src_root / "shared"
+
+    # 主进程说明
+    if main_root.exists():
+        main_readme = dedent("""
+        # main/ 主进程（Electron）
+
+        职责建议：
+        - 创建和管理 BrowserWindow
+        - 处理应用生命周期（ready / activate / window-all-closed 等）
+        - 注册全局快捷键 / 菜单 / 托盘
+        - 负责安全敏感操作（文件访问、本地资源）并通过 IPC 暴露给 renderer
+        - 不直接处理 UI 逻辑
+        """).strip() + "\n"
+        write_file(main_root / "README.md", main_readme)
+
+    # 渲染进程说明
+    if renderer_root.exists():
+        renderer_readme = dedent("""
+        # renderer/ 渲染进程（前端 UI）
+
+        建议：
+        - 使用 React + Tailwind 或你熟悉的前端栈
+        - 把页面按「功能」而不是「组件细节」划分目录，例如：
+          - `views/TradingPanel`
+          - `views/Settings`
+          - `views/Auth`
+        - 所有调用主进程能力的地方都通过 preload 暴露的 API，而不是直接调用 Node API
+        """).strip() + "\n"
+        write_file(renderer_root / "README.md", renderer_readme)
+
+    # preload 说明
+    if preload_root.exists():
+        preload_readme = dedent("""
+        # preload/ 预加载脚本
+
+        职责：
+        - 使用 contextBridge 暴露受控 API 给 window.xxx
+        - 封装 IPC 调用，统一出入口
+        - 控制可以被 renderer 访问的功能范围，增强安全性
+
+        示例规划：
+        - `ipc/`：封装不同业务域的 IPC 通道
+        - `api/`：对外暴露给 renderer 调用的高层 API
+        """).strip() + "\n"
+        write_file(preload_root / "README.md", preload_readme)
+
+    # shared 说明
+    if shared_root.exists():
+        shared_readme = dedent("""
+        # shared/ 共享模块
+
+        建议放置内容：
+        - IPC 通信的 channel 常量
+        - 请求/响应的数据结构定义（TypeScript 类型 / JSON Schema 等）
+        - 通用工具函数（日志、配置加载等）
+        """).strip() + "\n"
+        write_file(shared_root / "README.md", shared_readme)
+
+    # Electron 专项笔记文档
+    electron_notes = dedent(f"""
+    # Electron 桌面应用设计笔记（模板自动生成）
+
+    项目：{meta['project_cn_name']} ({meta['project_name']})
+
+    ## 1. 窗口规划
+
+    - 主窗口：
+      - 尺寸：
+      - 是否可缩放：
+      - 是否支持多实例：
+    - 其他窗口（设置 / 日志 / 弹窗等）：
+
+    ## 2. IPC 通信设计
+
+    - 主要业务通道：
+      - 例：`channel: "auth/login"`，由 renderer 发起，main 处理
+    - 约定：
+      - 所有 IPC 请求都带上 requestId，方便追踪
+      - 错误格式统一：`{{ code, message, detail }}`
+
+    ## 3. 安全策略
+
+    - BrowserWindow 配置计划：
+      - 禁用 `nodeIntegration`
+      - 启用 `contextIsolation`
+      - 限制 `webSecurity` 设置
+    - 外部链接处理：
+      - 在 main 中统一拦截并用默认浏览器打开
+    - 文件读写：
+      - 仅允许通过 main 进程暴露的受控函数访问
+
+    ## 4. 技术栈约定（待补充）
+
+    - 渲染进程前端栈：
+    - 打包工具（electron-builder / forge / vite-electron 等）：
+    - 更新策略（自动更新 / 手动更新）：
+    """).strip() + "\n"
+    write_file(project_root / "docs" / "electron-notes.md", electron_notes)
+
+
+# -------- 模板选择路由 --------
+
 def apply_template(project_root: Path, project_type: str, template: str, meta: dict):
     if template == "fintech-dapp":
         apply_fintech_dapp_template(project_root, project_type, meta)
+    elif template == "electron-app":
+        apply_electron_app_template(project_root, project_type, meta)
     # default 模板就不做额外动作
 
 
@@ -378,7 +505,7 @@ def write_project_meta(project_root: Path, meta: dict):
     meta_to_save = {
         **meta,
         "created_at": datetime.now().isoformat(),
-        "scaffold_version": "2.0",
+        "scaffold_version": "3.0",
     }
     write_file(meta_path, json.dumps(meta_to_save, ensure_ascii=False, indent=2) + "\n", overwrite=True)
 
@@ -402,7 +529,7 @@ def git_init(project_root: Path):
         subprocess.run(["git", "init"], cwd=str(project_root), check=True)
         subprocess.run(["git", "add", "."], cwd=str(project_root), check=True)
         subprocess.run(
-            ["git", "commit", "-m", "chore: init project from scaffold v2"],
+            ["git", "commit", "-m", "chore: init project from scaffold v3"],
             cwd=str(project_root),
             check=True,
         )
@@ -414,7 +541,7 @@ def git_init(project_root: Path):
 # -------- CLI --------
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="单兵项目脚手架工具 v2")
+    parser = argparse.ArgumentParser(description="单兵项目脚手架工具 v3")
     parser.add_argument("project_name", nargs="?", help="项目英文机器名，例如 fintech-x-app-202511")
     parser.add_argument("--type", "-t", dest="project_type", choices=PROJECT_TYPES, help="项目类型")
     parser.add_argument("--cn-name", dest="project_cn_name", help="项目中文名")
@@ -504,7 +631,8 @@ def main():
     print("   1. 打开 docs/project-brief.md 补全项目信息")
     if template == "fintech-dapp":
         print("   2. 查看 docs/fintech-notes.md，把业务关键点先写清楚")
+    elif template == "electron-app":
+        print("   2. 查看 docs/electron-notes.md，先把窗口/IPC/安全策略写清楚")
     else:
         print("   2. 在 docs/roadmap.md 写出 M1 要完成的具体项")
     print("   3. 决定技术栈并开始搭建最小运行环境（Hello World）")
-
