@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vibe-scaffold"
-version = "0.1.0"
+version = "0.2.0"
 description = "Single-dev project scaffold CLI with vibe-friendly defaults."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
 authors = [
-  { name = "Bin He" }
+  { name = "Bruce" }
 ]
 
 dependencies = [
