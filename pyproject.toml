@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vibe-scaffold"
+version = "0.1.0"
+description = "Single-dev project scaffold CLI with vibe-friendly defaults."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+  { name = "Bin He" }
+]
+
+dependencies = [
+  # 目前只用到标准库，这里可以暂时为空数组，保留扩展空间
+]
+
+[project.scripts]
+# 这里定义命令名 -> Python 入口函数
+vibe-scaffold = "vibe_scaffold.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["vibe_scaffold"]
+
